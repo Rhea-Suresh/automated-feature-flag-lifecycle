@@ -1,0 +1,100 @@
+name: Feature Flag Lifecycle Automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Lifecycle Action to execute'
+        required: true
+        type: choice
+        options:
+          - list
+          - get
+          - create
+          - enable
+          - disable
+          - rollout
+          - archive
+        default: 'get'
+      flag_name:
+        description: 'Target feature flag name'
+        required: false
+        default: 'new-dashboard'
+      environment:
+        description: 'Target Unleash environment'
+        required: false
+        type: choice
+        options:
+          - development
+          - production
+        default: 'development'
+      rollout_percentage:
+        description: 'Rollout percentage (0-100, only for rollout action)'
+        required: false
+        default: '100'
+      confirm_archive:
+        description: 'Confirm archive action (Safety guard for destructive action)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  manage-flags:
+    name: Execute Feature Flag Action
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Lifecycle Script
+        env:
+          UNLEASH_API_URL: ${{ secrets.UNLEASH_API_URL }}
+          UNLEASH_ADMIN_TOKEN: ${{ secrets.UNLEASH_ADMIN_TOKEN }}
+          UNLEASH_PROJECT: 'default'
+          UNLEASH_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          ACTION="${{ inputs.action }}"
+          FLAG="${{ inputs.flag_name }}"
+          ENV_NAME="${{ inputs.environment }}"
+          ROLLOUT="${{ inputs.rollout_percentage }}"
+          CONFIRM="${{ inputs.confirm_archive }}"
+
+          echo "Executing feature flag lifecycle action: $ACTION on flag: $FLAG in environment: $ENV_NAME"
+
+          case "$ACTION" in
+            list)
+              node scripts/manage-flags.js list
+              ;;
+            get)
+              node scripts/manage-flags.js get "$FLAG"
+              ;;
+            create)
+              node scripts/manage-flags.js create "$FLAG" "Created via GitHub Actions" "release"
+              ;;
+            enable)
+              node scripts/manage-flags.js enable "$FLAG" "$ENV_NAME"
+              ;;
+            disable)
+              node scripts/manage-flags.js disable "$FLAG" "$ENV_NAME"
+              ;;
+            rollout)
+              node scripts/manage-flags.js rollout "$FLAG" "$ROLLOUT" "$ENV_NAME"
+              ;;
+            archive)
+              if [ "$CONFIRM" = "true" ]; then
+                node scripts/manage-flags.js archive "$FLAG" --confirm
+              else
+                echo "::error::Archive action rejected: confirm_archive must be checked true."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::Unknown action $ACTION"
+              exit 1
+              ;;
+          esac

@@ -1,0 +1,24 @@
+# Node dependencies and build artifacts
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Git files
+.git/
+.gitignore
+
+# Environment secrets (MUST NEVER be baked into images)
+.env
+.env.*
+!.env.example
+
+# Documentation & tests
+*.md
+tests/
+coverage/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

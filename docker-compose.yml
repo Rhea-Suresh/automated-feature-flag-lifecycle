@@ -1,0 +1,82 @@
+
+services:
+  # -------------------------------------------------------------
+  # 1. PostgreSQL Database for Unleash configuration & state persistence
+  # -------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-unleash}
+      POSTGRES_USER: ${DATABASE_USERNAME:-unleash_user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-unleash_secure_password_replace_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-unleash_user} -d ${DATABASE_NAME:-unleash}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # -------------------------------------------------------------
+  # 2. Unleash Feature Flag Management Server
+  # -------------------------------------------------------------
+  unleash:
+    image: unleashorg/unleash-server:5.12.0
+    container_name: unleash
+    restart: unless-stopped
+    ports:
+      - "${UNLEASH_HOST_PORT:-4242}:4242"
+    environment:
+      DATABASE_URL: "postgres://${DATABASE_USERNAME:-unleash_user}:${DATABASE_PASSWORD:-unleash_secure_password_replace_me}@postgres:5432/${DATABASE_NAME:-unleash}"
+      DATABASE_SSL: "false"
+      LOG_LEVEL: "info"
+      UNLEASH_DEFAULT_ADMIN_USERNAME: ${UNLEASH_DEFAULT_ADMIN_USERNAME:-admin}
+      UNLEASH_DEFAULT_ADMIN_PASSWORD: ${UNLEASH_DEFAULT_ADMIN_PASSWORD:-unleash4all}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4242/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # -------------------------------------------------------------
+  # 3. Node.js Express Application Service
+  # -------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-production}
+      UNLEASH_API_URL: ${UNLEASH_API_URL:-http://unleash:4242/api}
+      UNLEASH_API_TOKEN: ${UNLEASH_API_TOKEN:-}
+      UNLEASH_APP_NAME: ${UNLEASH_APP_NAME:-feature-flag-app}
+    depends_on:
+      unleash:
+        condition: service_healthy
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+    name: postgres_data
+
+networks:
+  app-network:
+    name: app-network
+    driver: bridge
