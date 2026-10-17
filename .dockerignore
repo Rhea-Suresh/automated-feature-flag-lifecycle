@@ -14,6 +14,7 @@ yarn-error.log
 
 # Documentation & tests
 *.md
+test/
 tests/
 coverage/
 
